@@ -7,21 +7,24 @@
  * 0600, newest MAX_PHOTOS kept, never uploaded (the app blocks all network).
  *
  * PHOTO_TIMING is the single switch for the order:
- *   'after_lock'   lock first, then take the photo (never delays the lock).
- *                  Depends on the OS still giving the camera to the app once the
- *                  screen is locked -- the user has to test this.
- *   'before_lock'  grab a photo first with a short camera wait, then lock.
- *                  Delays the lock by the camera start-up time.
+ *   'before_lock'  (default) grab a photo first, then lock. The lock waits at
+ *                  most PRE_LOCK_MAX_SECONDS for the photo; if the camera is
+ *                  slower, it locks anyway and keeps the photo if it arrives.
+ *   'after_lock'   lock first, then take the photo. Does NOT work on macOS:
+ *                  once the screen is locked the camera refuses to start
+ *                  ("NotReadableError: Could not start video source", seen on
+ *                  macOS 27.2.1).
  */
 
 import { chmod, mkdir, open, readdir, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-export const PHOTO_TIMING = 'after_lock';
+export const PHOTO_TIMING = 'before_lock';
 export const TIMINGS = Object.freeze(['after_lock', 'before_lock']);
 export const MAX_PHOTOS = 50;
 export const CAMERA_WAIT_SECONDS = 5.0; // wait for an in-flight face check to free the camera
-export const PRE_LOCK_CAMERA_WAIT = 0.3; // before_lock: never wait long for the camera
+export const PRE_LOCK_CAMERA_WAIT = 0.3; // before_lock: never wait long for a busy camera
+export const PRE_LOCK_MAX_SECONDS = 1.5; // before_lock: the lock never waits longer than this for the photo
 export const WARMUP_FRAMES = 8; // let auto-exposure settle so the photo is not black
 export const JPEG_QUALITY = 85;
 

@@ -150,10 +150,13 @@
       ? u.trusted.map((d) => deviceItem(d, btn('Remove', 'danger', () => act(api.usbUntrust(d.key)))))
       : [empty('Nothing trusted yet: every newly plugged device will lock the screen.')]));
 
+    $('usb-events-count').textContent = `(${u.events.length} of the last ${u.eventsMax} kept)`;
+    $('usb-events-clear').disabled = u.events.length === 0;
     $('usb-events').replaceChildren(...(u.events.length ? u.events.flatMap((e) => e.devices.map((d) => {
       const when = new Date(e.time).toLocaleString();
       const li = deviceItem(d, d.trusted ? null : btn('Trust this device', 'secondary', () => act(api.usbTrust(d.key))));
-      li.firstChild.append(el('div', 'meta', `${when} · lock ${e.lock}${e.photo ? ' · photo taken' : ''}`));
+      if (d.trusted) li.firstChild.append(el('span', 'tag', 'trusted now'));
+      li.firstChild.append(el('div', 'meta', `${when} · lock ${e.lock} · ${e.photo ? 'photo taken' : 'no photo'}`));
       return li;
     })) : [empty('No USB locks yet.')]));
 
@@ -172,6 +175,7 @@
   $('usb-guard').addEventListener('change', (e) => act(api.saveSettings({ usbGuard: e.target.checked })));
   $('usb-photo').addEventListener('change', (e) => act(api.saveSettings({ usbPhoto: e.target.checked })));
   $('usb-trust-connected').addEventListener('click', () => act(api.usbTrustConnected()));
+  $('usb-events-clear').addEventListener('click', () => act(api.usbClearEvents()));
   $('photos-open').addEventListener('click', () => act(api.photosOpenFolder()));
   $('photos-delete').addEventListener('click', () => act(api.photosDeleteAll()));
   api.usbState().then(renderUsb);

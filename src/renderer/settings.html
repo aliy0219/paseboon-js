@@ -80,8 +80,11 @@
     <h3>Trusted devices</h3>
     <ul id="usb-trusted" class="list"></ul>
 
-    <h3>Recent USB locks</h3>
+    <h3>Recent USB locks <span id="usb-events-count" class="muted small"></span></h3>
+    <p class="muted small">One entry per untrusted device that locked the screen, newest first.
+      Some devices (phones, modems) reconnect under a second ID and show up twice.</p>
     <ul id="usb-events" class="list"></ul>
+    <div class="row"><button id="usb-events-clear" type="button" class="secondary">Clear list</button></div>
 
     <h3>Intruder photos</h3>
     <p id="photo-count" class="muted"></p>

@@ -28,7 +28,7 @@ import { deviceIds, deviceKey, deviceLabel, enumerateDevices } from '../usb/devi
 import { IntruderResponse, UsbGuard, UsbMonitor } from '../usb/guard.js';
 import * as photos from '../usb/photos.js';
 import {
-  TrustedCache, loadEvents, loadTrusted, recordEvent, trust, untrust,
+  MAX_EVENTS, TrustedCache, clearEvents, loadEvents, loadTrusted, recordEvent, trust, untrust,
 } from '../usb/trusted.js';
 import { CheckSession, FaceEngine } from '../vision/engine.js';
 import { bestMatch } from '../vision/sface.js';
@@ -378,7 +378,8 @@ async function usbState() {
     trusted: trusted.sorted().map((d) => deviceView(d, trusted)),
     connected,
     connectedError,
-    events: loadEvents(EVENTS_FILE).slice(-5).reverse().map((e) => ({
+    eventsMax: MAX_EVENTS,
+    events: loadEvents(EVENTS_FILE).reverse().map((e) => ({
       time: e.time, lock: e.lock, photo: e.photo ? path.basename(e.photo) : null,
       devices: e.devices.map((d) => deviceView(d, trusted)),
     })),
@@ -566,6 +567,7 @@ function installIpc() {
   handle('usb-trust-connected', () => trustConnected());
   handle('usb-trust', (key) => trustKey(key));
   handle('usb-untrust', (key) => untrustKey(key));
+  handle('usb-clear-events', async () => { await clearEvents(EVENTS_FILE); return usbState(); });
   handle('photos-delete-all', () => deleteAllPhotos());
   handle('photos-open-folder', () => openPhotosFolder());
 }

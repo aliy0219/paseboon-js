@@ -11,7 +11,7 @@ import {
 import { IntruderResponse, UsbGuard, UsbMonitor } from '../src/usb/guard.js';
 import { PHOTO_TIMING } from '../src/usb/photos.js';
 import {
-  MAX_EVENTS, TrustedCache, TrustedList, loadEvents, loadTrusted, recordEvent, saveTrusted, trust, untrust,
+  MAX_EVENTS, TrustedCache, TrustedList, clearEvents, loadEvents, loadTrusted, recordEvent, saveTrusted, trust, untrust,
 } from '../src/usb/trusted.js';
 import { tmpDir } from './support/tmp.mjs';
 
@@ -213,6 +213,15 @@ test(`events keep the last ${MAX_EVENTS}, owner-only`, async () => {
   if (POSIX) assert.equal(statSync(f).mode & 0o777, 0o600);
 });
 
+test('clearing the recent USB locks empties the list, owner-only', async () => {
+  const f = path.join(tmpDir('events-clear-'), 'usb_events.json');
+  await recordEvent(f, { devices: [STICK], lock: 'verified', photo: null });
+  assert.equal(loadEvents(f).length, 1);
+  await clearEvents(f);
+  assert.deepEqual(loadEvents(f), []);
+  if (POSIX) assert.equal(statSync(f).mode & 0o777, 0o600);
+});
+
 // ── response: lock, then photo ────────────────────────────────────────────
 function response({ photo = async () => 'p.jpg', locked = false, lockResult = true, timing } = {}) {
   const calls = [];
@@ -230,25 +239,44 @@ function response({ photo = async () => 'p.jpg', locked = false, lockResult = tr
   return { r, calls, notes, recorded };
 }
 
-test('default timing is lock first, then photo', async () => {
-  assert.equal(PHOTO_TIMING, 'after_lock');
+test('default timing is photo first, then lock (macOS cannot start the camera once locked)', async () => {
+  assert.equal(PHOTO_TIMING, 'before_lock');
   const { r, calls } = response();
   const event = await r.handle([STICK]);
-  assert.deepEqual(calls, ['lock', 'photo']);
+  assert.deepEqual(calls, ['photo', 'lock']);
   assert.equal(event.lock, 'verified');
   assert.equal(event.photo, 'p.jpg');
 });
 
-test('"before_lock" timing is the one switch that reverses the order', async () => {
-  const { r, calls } = response({ timing: 'before_lock' });
+test('"after_lock" timing is the one switch that reverses the order', async () => {
+  const { r, calls } = response({ timing: 'after_lock' });
   await r.handle([STICK]);
-  assert.deepEqual(calls, ['photo', 'lock']);
+  assert.deepEqual(calls, ['lock', 'photo']);
+});
+
+test('a slow camera never holds the lock back; a late photo is still kept', async () => {
+  let release;
+  const slow = new Promise((res) => { release = res; });
+  const order = [];
+  const r = new IntruderResponse({
+    isLocked: async () => false,
+    lock: async () => { order.push('lock'); release('late.jpg'); return true; },
+    photo: async () => { order.push('photo-start'); const p = await slow; order.push('photo-done'); return p; },
+    notify: () => {},
+    timing: 'before_lock',
+    sleep: async () => {},          // the cap expires immediately
+    log: quiet,
+  });
+  const event = await r.handle([STICK]);
+  assert.deepEqual(order, ['photo-start', 'lock', 'photo-done']);
+  assert.equal(event.lock, 'verified');
+  assert.equal(event.photo, 'late.jpg');
 });
 
 test('a failed photo does not affect the lock', async () => {
   const { r, calls, recorded } = response({ photo: async () => { throw new Error('camera busy'); } });
   const event = await r.handle([STICK]);
-  assert.deepEqual(calls, ['lock', 'photo']);
+  assert.deepEqual(calls, ['photo', 'lock']);
   assert.equal(event.lock, 'verified');
   assert.equal(event.photo, null);
   assert.equal(recorded.length, 1);

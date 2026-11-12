@@ -110,6 +110,10 @@ export function loadEvents(file) {
   return out;
 }
 
+export async function clearEvents(file) {
+  await writePrivate(file, '[]');
+}
+
 export async function recordEvent(file, { devices, lock, photo }, now = new Date()) {
   const events = [...loadEvents(file), { time: now.toISOString(), devices, lock, photo: photo ?? null }]
     .slice(-MAX_EVENTS);

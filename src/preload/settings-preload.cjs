@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('paseboon', {
   usbTrustConnected: () => ipcRenderer.invoke('usb-trust-connected'),
   usbTrust: (key) => ipcRenderer.invoke('usb-trust', String(key)),
   usbUntrust: (key) => ipcRenderer.invoke('usb-untrust', String(key)),
+  usbClearEvents: () => ipcRenderer.invoke('usb-clear-events'),
   photosDeleteAll: () => ipcRenderer.invoke('photos-delete-all'),
   photosOpenFolder: () => ipcRenderer.invoke('photos-open-folder'),
   onState: listen('state'),

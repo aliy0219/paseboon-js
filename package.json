@@ -1,7 +1,7 @@
 {
   "name": "paseboon-js",
   "productName": "Paseboon JS",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Locks your computer when you walk away, and when someone else sits down.",
   "license": "MIT",
   "private": true,

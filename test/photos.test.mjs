@@ -18,9 +18,9 @@ const opts = (dir, extra = {}) => ({
   deviceKeys: ['0781:5581:4C530001'], dir, grab: async () => frame, encode: () => fakeJpeg, log: quiet, ...extra,
 });
 
-test('the timing constant is valid and defaults to lock-first', () => {
+test('the timing constant is valid and defaults to photo-first', () => {
   assert.ok(TIMINGS.includes(PHOTO_TIMING));
-  assert.equal(PHOTO_TIMING, 'after_lock');
+  assert.equal(PHOTO_TIMING, 'before_lock');
 });
 
 test('takePhoto writes a private JPEG named by timestamp + device', async () => {

@@ -2,6 +2,18 @@
 
 Versions follow [Semantic Versioning](https://semver.org/). Each release is a git tag `vX.Y.Z`.
 
+## [0.1.4] - 2026-11-12
+
+### Fixed
+- **Intruder photo was never saved on macOS.** The photo was taken after locking, and macOS
+  refuses to start the camera once the screen is locked (`NotReadableError: Could not start
+  video source`). The photo is now taken first and the lock follows. The lock waits at most
+  1.5 s; with a slower camera it locks anyway and keeps the photo if it still arrives.
+- **Recent USB locks** showed only the last 5 of the 20 kept entries, with no count. It now
+  shows all kept entries, newest first, with a count ("N of the last 20 kept"), each row says
+  whether a photo was taken, devices trusted since are tagged "trusted now", and a
+  **Clear list** button empties it.
+
 ## [0.1.3] - 2026-11-12
 
 ### Added

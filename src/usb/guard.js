@@ -14,7 +14,7 @@
  */
 
 import { deviceKey, deviceLabel } from './devices.js';
-import { PHOTO_TIMING } from './photos.js';
+import { PHOTO_TIMING, PRE_LOCK_MAX_SECONDS } from './photos.js';
 
 export const POLL_SECONDS = 0.5;
 
@@ -109,13 +109,30 @@ const LOCK_STATES = { true: 'verified', null: 'unknown', false: 'failed' };
 
 /** What happens for an untrusted device: lock (verify + fallback + notify), then an optional photo. */
 export class IntruderResponse {
-  constructor({ isLocked, lock, photo = null, notify, record = null, onEvent = null, timing = PHOTO_TIMING, log = console }) {
-    Object.assign(this, { isLocked, lock, photo, notify, record, onEvent, timing, log });
+  constructor({
+    isLocked, lock, photo = null, notify, record = null, onEvent = null, timing = PHOTO_TIMING, log = console,
+    preLockMaxSeconds = PRE_LOCK_MAX_SECONDS,
+    sleep = (s) => new Promise((r) => { const t = setTimeout(r, s * 1000); t.unref?.(); }),
+  }) {
+    Object.assign(this, { isLocked, lock, photo, notify, record, onEvent, timing, log, preLockMaxSeconds, sleep });
   }
 
   async handle(devices) {
     let photo = null;
-    if (this.photo && this.timing === 'before_lock') photo = await this._photo(devices);
+    let late = null;
+    if (this.photo && this.timing === 'before_lock') {
+      // The camera will not start once the screen is locked, so try first --
+      // but never let a slow camera hold the lock back for long.
+      const pending = this._photo(devices);
+      const TIMEOUT = Symbol('timeout');
+      const first = await Promise.race([pending, this.sleep(this.preLockMaxSeconds).then(() => TIMEOUT)]);
+      if (first === TIMEOUT) {
+        this.log.warn(`intruder photo not ready within ${this.preLockMaxSeconds}s; locking first`);
+        late = pending;
+      } else {
+        photo = first;
+      }
+    }
     let lock;
     if ((await this.isLocked()) === true) {
       lock = 'already_locked';
@@ -123,7 +140,8 @@ export class IntruderResponse {
     } else {
       lock = LOCK_STATES[String(await this.lock())] ?? 'unknown';
     }
-    if (this.photo && this.timing !== 'before_lock') photo = await this._photo(devices);
+    if (late) photo = await late; // a stream that started before the lock may still deliver
+    else if (this.photo && this.timing !== 'before_lock') photo = await this._photo(devices);
     const event = { devices, lock, photo };
     if (this.record) {
       try {
