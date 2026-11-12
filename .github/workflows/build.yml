@@ -1,0 +1,56 @@
+name: build
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest     # Apple silicon runner: arm64 .dmg/.zip
+            dist: dist:mac
+            smoke: '"dist/mac-arm64/Paseboon JS.app/Contents/MacOS/Paseboon JS"'
+          - os: windows-latest
+            dist: dist:win
+            smoke: '"dist/win-unpacked/Paseboon JS.exe"'
+          - os: ubuntu-latest
+            dist: dist:linux
+            # Ubuntu 24.04 runners block unprivileged user namespaces, so the
+            # Chromium sandbox cannot start under CI; the app enables it everywhere else.
+            smoke: xvfb-run -a dist/linux-unpacked/paseboon-js --no-sandbox
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 26.13.1
+          cache: npm
+      - run: npm ci
+      - run: npm run models
+      - run: npm test
+      - run: npm run ${{ matrix.dist }} -- --publish never
+      - name: Smoke-test the packaged app (loads models + native modules, checks network is blocked; no camera, no lock)
+        shell: bash
+        env:
+          PASEBOON_SMOKE: "1"
+          PASEBOON_JS_HOME: ${{ runner.temp }}/paseboon-js-smoke
+        run: ${{ matrix.smoke }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: paseboon-js-${{ runner.os }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.deb
+          if-no-files-found: error

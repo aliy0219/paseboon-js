@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+  <title>Paseboon JS</title>
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+  <header>
+    <h1>Paseboon JS</h1>
+    <p id="status" class="status">…</p>
+    <div id="warnings"></div>
+  </header>
+
+  <section>
+    <h2>Watching</h2>
+    <div class="row">
+      <button id="pause" type="button">Pause</button>
+      <label class="check"><input id="login" type="checkbox"> Start at login</label>
+    </div>
+  </section>
+
+  <section>
+    <h2>Your face</h2>
+    <p id="enrolled" class="muted"></p>
+    <div class="row">
+      <button id="enroll" type="button">Enroll face</button>
+      <button id="enroll-add" type="button" class="secondary">Add samples</button>
+      <button id="test-camera" type="button" class="secondary">Test camera</button>
+    </div>
+    <p id="face-result" class="result" aria-live="polite"></p>
+  </section>
+
+  <section>
+    <h2>Settings</h2>
+    <form id="form">
+      <label>Mode
+        <select name="mode">
+          <option value="presence">presence: any face keeps it unlocked while idle</option>
+          <option value="owner">owner: only your face keeps it unlocked</option>
+        </select>
+      </label>
+      <label>Lock timer: seconds idle before a camera check
+        <input name="idleThreshold" type="number" min="1" step="1"></label>
+      <label>Empty checks before locking
+        <input name="absentChecksToLock" type="number" min="1" step="1"></label>
+      <label>While idle and present, check again every (s)
+        <input name="recheckEvery" type="number" min="1" step="1"></label>
+      <label>While typing, check it is you every (s, 0 = off)
+        <input name="activeCheckEvery" type="number" min="0" step="1"></label>
+      <label>"Not you" checks before locking
+        <input name="strangerChecksToLock" type="number" min="1" step="1"></label>
+      <label>Camera broken: plain idle lock after (s)
+        <input name="cameraFailIdle" type="number" min="1" step="1"></label>
+      <label>Quiet period after you unlock (s)
+        <input name="unlockGrace" type="number" min="0" step="1"></label>
+      <label>Match threshold (cosine, default 0.363)
+        <input name="matchThreshold" type="number" min="0.05" max="0.95" step="0.001"></label>
+      <div class="row">
+        <button type="submit">Save</button>
+        <button id="reset" type="button" class="secondary">Defaults</button>
+      </div>
+      <p id="form-result" class="result" aria-live="polite"></p>
+    </form>
+  </section>
+
+  <section id="usb">
+    <h2>USB guard</h2>
+    <label class="check block"><input id="usb-guard" type="checkbox"> Lock when an untrusted USB device is plugged in</label>
+    <label class="check block"><input id="usb-photo" type="checkbox"> Also take an intruder photo (kept only on this computer)</label>
+    <p id="usb-status" class="muted small"></p>
+    <p id="usb-warning" class="warning" hidden></p>
+
+    <h3>Connected now</h3>
+    <ul id="usb-connected" class="list"></ul>
+    <div class="row"><button id="usb-trust-connected" type="button" class="secondary">Trust devices connected now</button></div>
+
+    <h3>Trusted devices</h3>
+    <ul id="usb-trusted" class="list"></ul>
+
+    <h3>Recent USB locks</h3>
+    <ul id="usb-events" class="list"></ul>
+
+    <h3>Intruder photos</h3>
+    <p id="photo-count" class="muted"></p>
+    <div class="row">
+      <button id="photos-open" type="button" class="secondary">Open folder</button>
+      <button id="photos-delete" type="button" class="danger">Delete all…</button>
+    </div>
+    <p id="usb-result" class="result" aria-live="polite"></p>
+    <p class="muted small">Devices are identified by vendor ID, product ID and serial number (when the device has one).
+      A malicious "BadUSB" device can copy a trusted device's IDs, so this guard does not stop a deliberate attacker.</p>
+  </section>
+
+  <section>
+    <h2>Test</h2>
+    <div class="row">
+      <button id="test-lock" type="button" class="danger">Test lock…</button>
+    </div>
+    <p id="lock-result" class="result" aria-live="polite"></p>
+    <p class="muted small">Camera frames stay in memory. Nothing is sent over the network: the app blocks all network requests. Log: <span id="log"></span></p>
+  </section>
+
+  <script src="settings.js"></script>
+</body>
+</html>

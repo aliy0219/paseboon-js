@@ -1,0 +1,75 @@
+# electron-builder config. Native modules (onnxruntime-node, koffi) ship
+# per-platform binaries, so build each OS on that OS (see the CI workflow).
+appId: local.paseboon-js
+productName: Paseboon JS
+copyright: Copyright (c) 2026 Alireza (MIT)
+directories:
+  output: dist
+  buildResources: build
+# Platform-level `files` REPLACE this list (they are not merged), so every
+# platform below repeats the include list and adds its own exclusions.
+files:
+  - package.json
+  - src/**/*
+extraResources:
+  - from: models
+    to: models
+    filter: ["*.onnx"]
+asar: true
+asarUnpack:
+  - node_modules/onnxruntime-node/bin/**
+  - node_modules/koffi/**
+  - node_modules/@koromix/**
+# Both native modules are prebuilt N-API binaries: nothing to rebuild.
+npmRebuild: false
+publish: null
+
+mac:
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]
+  category: public.app-category.utilities
+  # Ad-hoc signature ("-"): no Apple Developer ID here. Gatekeeper will warn on
+  # other Macs; sign with a real identity + notarize to distribute.
+  identity: "-"
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    LSUIElement: true
+    NSCameraUsageDescription: >-
+      Paseboon JS briefly turns on the camera to check that you are still at
+      your computer, and locks the screen when you are not. Images never leave memory.
+  files:
+    - package.json
+    - src/**/*
+    - "!node_modules/onnxruntime-node/bin/napi-v6/{linux,win32}/**"
+    # identical copy; the binding links @rpath/libonnxruntime.1.dylib (otool -L)
+    - "!node_modules/onnxruntime-node/bin/napi-v6/darwin/arm64/libonnxruntime.1.31.1.dylib"
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  files:
+    - package.json
+    - src/**/*
+    - "!node_modules/onnxruntime-node/bin/napi-v6/{linux,darwin}/**"
+nsis:
+  oneClick: true
+  perMachine: false
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  category: Utility
+  maintainer: Alireza <60154718+Alirezayv1378.noreply.github.com>
+  files:
+    - package.json
+    - src/**/*
+    - "!node_modules/onnxruntime-node/bin/napi-v6/{darwin,win32}/**"
