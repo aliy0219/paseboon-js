@@ -295,19 +295,18 @@ async function refreshPhotoCount() {
 /** One frame from the shared camera queue, waiting briefly for an in-flight check. */
 async function grabPhotoFrame() {
   const beforeLock = photos.PHOTO_TIMING === 'before_lock';
-  let frame = null;
+  const watch = new photos.ExposureWatch(); // wait for auto-exposure; the first frames are black
   const { error } = await capture({
-    seconds: 2,
-    warmup: beforeLock ? 2 : photos.WARMUP_FRAMES,
+    seconds: photos.SETTLE_SECONDS,
+    warmup: 0,
     queueWaitSeconds: beforeLock ? photos.PRE_LOCK_CAMERA_WAIT : photos.CAMERA_WAIT_SECONDS,
     deviceId: state.settings.cameraDeviceId,
-    handleFrame: async (img) => {
-      frame = img;
-      return true;
-    },
+    handleFrame: async (img) => watch.offer(img),
   });
-  if (!frame) throw new Error(error || 'camera returned no frames');
-  return frame;
+  if (!watch.frame) throw new Error(error || 'camera returned no frames');
+  log.info(`intruder photo exposure: brightness ${Math.round(watch.mean)}/255 after ${watch.frames} frame(s)`
+    + `${watch.settled ? '' : ' (not settled)'}`);
+  return watch.frame;
 }
 
 function takeIntruderPhoto(devices) {

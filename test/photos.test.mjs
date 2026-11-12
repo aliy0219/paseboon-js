@@ -6,7 +6,7 @@ import { test } from 'node:test';
 
 import { createExclusiveQueue } from '../src/core/queue.js';
 import {
-  MAX_PHOTOS, PHOTO_TIMING, TIMINGS, deleteAll, listPhotos, photoStem, takePhoto,
+  ExposureWatch, MAX_PHOTOS, PHOTO_TIMING, TIMINGS, meanLuma, deleteAll, listPhotos, photoStem, takePhoto,
 } from '../src/usb/photos.js';
 import { tmpDir } from './support/tmp.mjs';
 
@@ -108,4 +108,26 @@ test('a photo gives up when the camera stays busy, and never runs later', async 
   await delay(5);
   assert.equal(ran, false);
   assert.equal(await enqueue(async () => 'next'), 'next'); // queue still healthy
+});
+
+// ── exposure: never save the black first frames of a cold camera ─────────
+const gray = (v, w = 64, h = 48) => ({ width: w, height: h, data: new Uint8Array(w * h * 3).fill(v) });
+
+test('mean brightness of a frame', () => {
+  assert.equal(Math.round(meanLuma(gray(0))), 0);
+  assert.equal(Math.round(meanLuma(gray(200))), 200);
+});
+
+test('exposure settles on stable, bright frames and keeps the last one', () => {
+  const w = new ExposureWatch();
+  assert.deepEqual([0, 10, 60, 110, 112].map((v) => w.offer(gray(v))), [false, false, false, false, true]);
+  assert.equal(Math.round(w.mean), 112);
+  assert.equal(w.frame.data[0], 112);
+});
+
+test('a dark room never settles; the brightest frame is kept', () => {
+  const w = new ExposureWatch();
+  for (const v of [0, 2, 5, 9, 7]) assert.equal(w.offer(gray(v)), false);
+  assert.equal(w.settled, false);
+  assert.equal(w.frame.data[0], 9);
 });

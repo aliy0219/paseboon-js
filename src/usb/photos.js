@@ -24,8 +24,12 @@ export const TIMINGS = Object.freeze(['after_lock', 'before_lock']);
 export const MAX_PHOTOS = 50;
 export const CAMERA_WAIT_SECONDS = 5.0; // wait for an in-flight face check to free the camera
 export const PRE_LOCK_CAMERA_WAIT = 0.3; // before_lock: never wait long for a busy camera
-export const PRE_LOCK_MAX_SECONDS = 1.5; // before_lock: the lock never waits longer than this for the photo
-export const WARMUP_FRAMES = 8; // let auto-exposure settle so the photo is not black
+export const PRE_LOCK_MAX_SECONDS = 2.5; // before_lock: the lock never waits longer than this for the photo
+// Webcams start dark and need ~0.5-1 s of auto-exposure. A fixed 2-frame warm-up
+// gave black photos (brightness 0.9/255), so read frames until exposure settles.
+export const SETTLE_SECONDS = 1.5; // read frames for at most this long
+export const SETTLE_MIN_MEAN = 35; // a usable photo is at least this bright (0-255)
+export const SETTLE_DELTA = 4; // brightness change between frames that counts as settled
 export const JPEG_QUALITY = 85;
 
 const POSIX = process.platform !== 'win32';
@@ -97,6 +101,41 @@ async function writeNew(bytes, dir, stem) {
     return file;
   }
   throw new Error('too many photos with the same name');
+}
+
+/** Average brightness (0-255) of a BGR frame, sampled every `step` pixels. */
+export function meanLuma(img, step = 16) {
+  let sum = 0;
+  let n = 0;
+  for (let y = 0; y < img.height; y += step) {
+    for (let x = 0; x < img.width; x += step) {
+      const i = (y * img.width + x) * 3;
+      sum += 0.114 * img.data[i] + 0.587 * img.data[i + 1] + 0.299 * img.data[i + 2];
+      n += 1;
+    }
+  }
+  return n ? sum / n : 0;
+}
+
+/** Feed frames in order; says when auto-exposure has settled and keeps the best frame. */
+export class ExposureWatch {
+  constructor({ minMean = SETTLE_MIN_MEAN, delta = SETTLE_DELTA } = {}) {
+    Object.assign(this, { minMean, delta, best: null, bestMean: -1, last: null, lastMean: null, settled: false, frames: 0 });
+  }
+
+  offer(img) {
+    const m = meanLuma(img);
+    this.frames += 1;
+    if (m > this.bestMean) { this.best = img; this.bestMean = m; }
+    if (this.lastMean !== null && m >= this.minMean && Math.abs(m - this.lastMean) <= this.delta) this.settled = true;
+    this.last = img;
+    this.lastMean = m;
+    return this.settled;
+  }
+
+  get frame() { return this.settled ? this.last : this.best; }
+
+  get mean() { return this.settled ? this.lastMean : this.bestMean; }
 }
 
 /** BGR frame -> JPEG bytes via Electron's built-in encoder (main process only). */

@@ -2,6 +2,15 @@
 
 Versions follow [Semantic Versioning](https://semver.org/). Each release is a git tag `vX.Y.Z`.
 
+## [0.1.5] - 2026-11-12
+
+### Fixed
+- **Intruder photos were black** (7-9 KB, average brightness 0.9/255). The photo was taken 2
+  frames after the camera started, before auto-exposure had adjusted. The app now reads frames
+  until the brightness is stable and bright enough (at most 1.5 s), keeping the brightest frame
+  in a dark room, and logs the brightness it got. The lock now waits at most 2.5 s for the photo
+  (was 1.5 s).
+
 ## [0.1.4] - 2026-11-12
 
 ### Fixed
