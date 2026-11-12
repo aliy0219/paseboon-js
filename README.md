@@ -7,11 +7,14 @@ project: `../../python/paseboon`.
 while typing · tray app with settings · USB guard with a trusted list · opt-in intruder
 photo · start at login · builds for macOS, Windows and Linux (via CI).
 
-| | macOS | Linux | Windows |
+| | macOS (arm64) | Linux (x64) | Windows (x64) |
 |---|---|---|---|
-| Build | dmg + zip built and verified locally (arm64) | CI only, not run | CI only, not run |
-| Face pipeline | parity with Python (cosine 1.00000) | not run | not run |
-| Camera, UI, real lock, USB plug-in | not run | not run | not run |
+| Build + installer | built locally and in CI | built in CI | built in CI |
+| Test suite (123 tests, incl. face parity with Python, cosine 1.00000) | passes locally and in CI | passes in CI | passes in CI |
+| Packaged app starts, loads models, blocks network (smoke test) | passes locally and in CI | passes in CI (under xvfb) | passes in CI |
+| Camera, face check, real lock, USB plug-in on a real machine | not verified yet | not run | not run |
+
+Installers for every OS are attached to each [GitHub Release](https://github.com/aliy0219/paseboon-js/releases).
 
 **Quick start:** `npm ci && npm run models && npm test && npm start`.
 
