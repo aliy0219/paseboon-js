@@ -1,13 +1,13 @@
 {
   "name": "paseboon-js",
   "productName": "Paseboon JS",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Locks your computer when you walk away, and when someone else sits down.",
   "license": "MIT",
   "private": true,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Alirezayv1378/paseboon-js.git"
+    "url": "git+https://github.com/aliy0219/paseboon-js.git"
   },
   "type": "module",
   "main": "src/main/main.js",
@@ -32,7 +32,7 @@
   },
   "author": {
     "name": "Alireza",
-    "email": "60154718+Alirezayv1378.noreply.github.com"
+    "email": "60154718+aliy0219@users.noreply.github.com"
   },
-  "homepage": "https://github.com/Alirezayv1378/paseboon-js"
+  "homepage": "https://github.com/aliy0219/paseboon-js"
 }

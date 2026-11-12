@@ -2,6 +2,12 @@
 
 Versions follow [Semantic Versioning](https://semver.org/). Each release is a git tag `vX.Y.Z`.
 
+## [0.1.1] - 2026-11-12
+
+### Fixed
+- Package metadata: GitHub account renamed to `aliy0219` (repository URL, homepage), and the
+  author / Linux package maintainer email was missing its `@users` part.
+
 ## [0.1.0] - 2026-11-12
 
 First release. An Electron rewrite of the Python Paseboon, with the same behaviour.
