@@ -35,3 +35,11 @@ test('CI actions are pinned to commit SHAs', () => {
   const wf = readFileSync(path.join(ROOT, '.github', 'workflows', 'build.yml'), 'utf8');
   for (const m of wf.matchAll(/uses: ([^\s]+)/g)) assert.match(m[1], /@[0-9a-f]{40}$/, m[1]);
 });
+
+test('macOS ships the auth helper next to the models (platform extraResources replace the top-level list)', () => {
+  const mac = yml.slice(yml.indexOf('\nmac:'), yml.indexOf('\nwin:'));
+  assert.match(mac, /from: build\/native\/paseboon-auth\s+to: paseboon-auth/);
+  assert.match(mac, /from: models\s+to: models/);
+  const pkg = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  assert.match(pkg.scripts['dist:mac'], /build:auth/);
+});

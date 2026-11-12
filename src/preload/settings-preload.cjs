@@ -9,6 +9,8 @@ const listen = (channel) => (callback) => {
 
 contextBridge.exposeInMainWorld('paseboon', {
   getState: () => ipcRenderer.invoke('get-state'),
+  authUnlock: () => ipcRenderer.invoke('auth-unlock'),
+  authTouch: () => ipcRenderer.invoke('auth-touch'),
   saveSettings: (partial) => ipcRenderer.invoke('save-settings', partial),
   enroll: (add) => ipcRenderer.invoke('enroll', { add: Boolean(add) }),
   testCamera: () => ipcRenderer.invoke('test-camera'),

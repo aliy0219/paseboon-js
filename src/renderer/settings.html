@@ -11,7 +11,13 @@
   <header>
     <h1>Paseboon JS</h1>
     <p id="status" class="status">…</p>
+    <p id="auth-banner" class="warning bad-banner" hidden></p>
     <div id="warnings"></div>
+    <div id="auth-lock" hidden>
+      <p>Settings are locked. Unlock with Touch ID or your login password.</p>
+      <button id="auth-unlock" type="button">Unlock</button>
+    </div>
+    <p id="auth-msg" class="result bad" aria-live="polite"></p>
   </header>
 
   <section>

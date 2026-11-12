@@ -6,7 +6,7 @@
  * checks while someone types.
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,12 +17,14 @@ import {
 } from 'electron';
 
 import { Agent, summarize } from '../core/agent.js';
+import { AuthGate } from '../core/authgate.js';
 import { createLogger } from '../core/logger.js';
 import { LEGACY_DIR_NAME, migrateLegacy } from '../core/migrate.js';
 import { Policy, Result, makeSettings } from '../core/policy.js';
 import {
-  SETTINGS_DEFAULTS, TemplateError, loadSettings, loadTemplates, saveSettings, saveTemplates,
+  SETTINGS_DEFAULTS, TemplateError, loadSettings, loadTemplates, saveSettings, saveTemplates, writePrivate,
 } from '../core/storage.js';
+import { createAuthenticator, helperPath } from '../platform/auth.js';
 import { createPlatform } from '../platform/index.js';
 import { deviceIds, deviceKey, deviceLabel, enumerateDevices } from '../usb/devices.js';
 import { IntruderResponse, UsbGuard, UsbMonitor } from '../usb/guard.js';
@@ -34,6 +36,7 @@ import { CheckSession, FaceEngine } from '../vision/engine.js';
 import { bestMatch } from '../vision/sface.js';
 import { cameraWindowIds, capture } from './camera.js';
 import { trayIcon } from './icon.js';
+import { protectRoutes } from './protect.js';
 import { installSecurity } from './security.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -61,8 +64,12 @@ const TEMPLATES_FILE = path.join(USER, 'face_templates.json');
 const TRUSTED_FILE = path.join(USER, 'trusted_usb.json');
 const EVENTS_FILE = path.join(USER, 'usb_events.json');
 const PHOTOS_DIR = path.join(USER, 'intruder_photos');
+const AUTH_FILE = path.join(USER, 'auth_state.json');
 const log = createLogger(path.join(USER, 'logs', 'agent.log'), { echo: !app.isPackaged || SMOKE });
 if (MIGRATED.length) log.info(`copied data from the old Away Lock JS folder: ${MIGRATED.join(', ')}`);
+const authHelperPath = () => helperPath({
+  packaged: app.isPackaged, resourcesPath: process.resourcesPath, appRoot: path.join(HERE, '..', '..'),
+});
 const modelsDir = () => (app.isPackaged
   ? path.join(process.resourcesPath, 'models')
   : path.join(HERE, '..', '..', 'models'));
@@ -83,6 +90,8 @@ const state = {
 };
 let tray = null;
 let settingsWin = null;
+let authenticator = null;
+let gate = null;
 
 // ── helpers ──────────────────────────────────────────────────────────────
 function policyPart(s) {
@@ -126,6 +135,7 @@ function publicState() {
     platform: process.platform,
     pythonAppFound: state.pythonAppFound,
     logFile: log.file,
+    auth: gate ? gate.view() : null,
     usb: {
       running: Boolean(state.usb.monitor?.running),
       photoCount: state.usb.photoCount,
@@ -187,6 +197,68 @@ async function startAgent() {
     state.warnings.push(`Watcher stopped after repeated errors: ${err.message}`);
     broadcast();
   });
+}
+
+// ── settings protection (OS login) ──────────────────────────────────────
+const authStore = {
+  load() {
+    let text;
+    try {
+      text = readFileSync(AUTH_FILE, 'utf8');
+    } catch (err) {
+      if (err.code === 'ENOENT') return null;
+      throw err;
+    }
+    return JSON.parse(text);
+  },
+  save: (s) => writePrivate(AUTH_FILE, JSON.stringify(s)),
+};
+
+function authMessage(r) {
+  if (r.reason === 'delay') return `Try again in ${r.retryIn} s.`;
+  if (r.reason === 'failed' && r.lock) return 'Too many failed attempts: the screen was locked.';
+  if (r.reason === 'failed') return `Authentication failed. Try again in ${r.retryIn} s.`;
+  return 'Authentication cancelled.';
+}
+
+/** Ensure an unlocked session; on the 3rd failure lock the screen (photo first if enabled). */
+async function requireAuth(what) {
+  const r = await gate.require();
+  if (!r.ok) {
+    log.warn(`protected action "${what}" denied: ${r.reason}${r.retryIn ? ` (retry in ${r.retryIn} s)` : ''}`);
+    if (r.lock) await authLockout();
+  }
+  broadcast();
+  return r;
+}
+
+async function authLockout() {
+  const response = new IntruderResponse({
+    isLocked: () => state.lockPlatform.isLocked(),
+    lock: async () => {
+      const result = await state.agent.lock(); // verify + fallback + notify
+      state.agent.policy.lockAttempted(performance.now() / 1000);
+      return result;
+    },
+    photo: state.settings.usbPhoto
+      ? () => photos.takePhoto({ deviceKeys: ['auth-failed'], dir: PHOTOS_DIR, grab: grabPhotoFrame, log })
+      : null,
+    notify: () => {},
+    log,
+  });
+  const event = await response.handle([]);
+  log.warn(`settings: 3 failed authentications -> lock ${event.lock}${event.photo ? `, photo ${path.basename(event.photo)}` : ''}`);
+  if (settingsWin && !settingsWin.isDestroyed()) settingsWin.close();
+  await refreshPhotoCount();
+  notify('Three failed attempts to open Paseboon JS settings: the screen was locked.');
+}
+
+/** Tray actions that change settings run only after authentication. */
+async function guarded(what, fn) {
+  const r = await requireAuth(what);
+  if (r.ok) return fn();
+  if (!r.lock && r.reason !== 'cancelled') notify(authMessage(r));
+  return null;
 }
 
 // ── user actions ─────────────────────────────────────────────────────────
@@ -482,12 +554,12 @@ function refreshTray() {
     {
       label: paused ? 'Resume watching' : 'Pause watching',
       enabled: canWatch,
-      click: () => setPaused(!paused),
+      click: () => guarded('pause', () => setPaused(!paused)),
     },
     { label: 'Lock now…', enabled: Boolean(state.agent), click: () => lockNow('Requested from the menu.') },
-    { label: 'Settings…', click: openSettings },
+    { label: 'Settings…', click: () => openSettingsGuarded() },
     { type: 'separator' },
-    { label: 'Quit Paseboon JS', click: () => app.quit() },
+    { label: 'Quit Paseboon JS', click: () => guarded('quit', () => app.quit()) },
   ]));
 }
 
@@ -505,6 +577,15 @@ async function setPaused(paused) {
   log.info(paused ? 'paused by user' : 'resumed by user');
   broadcast();
   return { paused };
+}
+
+/** Opening Settings needs the OS login (an already open window is just shown). */
+async function openSettingsGuarded() {
+  if (settingsWin && !settingsWin.isDestroyed()) return openSettings();
+  const r = await requireAuth('open-settings');
+  if (r.ok) return openSettings();
+  if (!r.lock && r.reason !== 'cancelled') notify(authMessage(r));
+  return null;
 }
 
 function openSettings() {
@@ -532,7 +613,11 @@ function openSettings() {
     settingsWin.show();
     if (process.platform === 'darwin') app.focus({ steal: true }); // menu-bar apps start in the background
   });
-  settingsWin.on('closed', () => { settingsWin = null; });
+  settingsWin.on('closed', () => {
+    settingsWin = null;
+    gate?.endSession(); // the next protected action prompts again
+    refreshTray();
+  });
   settingsWin.loadFile(path.join(HERE, '..', 'renderer', 'settings.html'));
 }
 
@@ -546,8 +631,16 @@ function installIpc() {
       return { error: err.message };
     }
   });
-  handle('get-state', () => publicState());
-  handle('save-settings', async (partial) => {
+  const routes = {
+    'get-state': () => publicState(),
+    'usb-state': () => usbState(),
+    'auth-unlock': async () => {
+      const r = await requireAuth('unlock-settings');
+      return r.ok ? { ok: true, unprotected: r.unprotected ?? null } : { authRequired: true, ...r };
+    },
+    'auth-touch': () => { gate.touch(); return { ok: true }; },
+  };
+  routes['save-settings'] = async (partial) => {
     if (!partial || typeof partial !== 'object') return { error: 'bad settings' };
     const saved = await saveSettings(SETTINGS_FILE, { ...state.settings, ...partial });
     state.warnings = state.warnings.filter((w) => !w.startsWith('Settings file') && !w.startsWith('Could not read settings'));
@@ -556,19 +649,21 @@ function installIpc() {
     log.info(`settings saved: ${JSON.stringify(policyPart(saved))} usbGuard=${saved.usbGuard} usbPhoto=${saved.usbPhoto}`);
     broadcast();
     return { ok: true };
+  };
+  Object.assign(routes, {
+    enroll: (opts) => enroll({ add: Boolean(opts?.add) }),
+    'test-camera': () => testCamera(),
+    'test-lock': () => lockNow('Test: the watcher will verify the lock and fall back if needed.'),
+    'set-login-item': (enabled) => setLoginItem(Boolean(enabled)),
+    'set-paused': (paused) => setPaused(Boolean(paused)),
+    'usb-trust-connected': () => trustConnected(),
+    'usb-trust': (key) => trustKey(key),
+    'usb-untrust': (key) => untrustKey(key),
+    'usb-clear-events': async () => { await clearEvents(EVENTS_FILE); return usbState(); },
+    'photos-delete-all': () => deleteAllPhotos(),
+    'photos-open-folder': () => openPhotosFolder(),
   });
-  handle('enroll', (opts) => enroll({ add: Boolean(opts?.add) }));
-  handle('test-camera', () => testCamera());
-  handle('test-lock', () => lockNow('Test: the watcher will verify the lock and fall back if needed.'));
-  handle('set-login-item', (enabled) => setLoginItem(Boolean(enabled)));
-  handle('set-paused', (paused) => setPaused(Boolean(paused)));
-  handle('usb-state', () => usbState());
-  handle('usb-trust-connected', () => trustConnected());
-  handle('usb-trust', (key) => trustKey(key));
-  handle('usb-untrust', (key) => untrustKey(key));
-  handle('usb-clear-events', async () => { await clearEvents(EVENTS_FILE); return usbState(); });
-  handle('photos-delete-all', () => deleteAllPhotos());
-  handle('photos-open-folder', () => openPhotosFolder());
+  for (const [channel, fn] of Object.entries(protectRoutes(routes, { requireAuth }))) handle(channel, fn);
 }
 
 // ── smoke mode: load everything, open nothing, exit ──────────────────────
@@ -607,15 +702,18 @@ async function smoke() {
   // Intruder-photo encoder on a synthetic black frame, in memory only (no camera, no file).
   report.jpegBytes = (await photos.encodeJpeg({ width: 64, height: 48, data: new Uint8Array(64 * 48 * 3) })).length;
   report.modelsDir = modelsDir();
+  report.authHelper = authenticator.name;
+  report.authHelperPresent = process.platform !== 'darwin' || existsSync(authHelperPath());
+  report.authCheck = await authenticator.check(); // never prompts
   console.log(`SMOKE ${JSON.stringify(report)}`);
-  app.exit(report.networkBlocked && report.facesOnBlank === 0 && report.jpegBytes > 0 ? 0 : 1);
+  app.exit(report.networkBlocked && report.facesOnBlank === 0 && report.jpegBytes > 0 && report.authHelperPresent ? 0 : 1);
 }
 
 // ── startup ──────────────────────────────────────────────────────────────
 if (!SMOKE && !app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', openSettings);
+  app.on('second-instance', () => openSettingsGuarded());
   app.on('window-all-closed', () => { /* keep running in the tray */ });
 
   app.whenReady().then(async () => {
@@ -623,6 +721,16 @@ if (!SMOKE && !app.requestSingleInstanceLock()) {
       appRoot: app.getAppPath(), isCameraWindow: (id) => cameraWindowIds.has(id), log,
     });
     if (process.platform === 'darwin' && !SMOKE) app.dock?.hide();
+    // No app menu with Quit/Cmd+Q: quitting goes through the tray (protected).
+    // OS shutdown/logout still quits: nothing ever blocks before-quit.
+    if (process.platform === 'darwin') {
+      Menu.setApplicationMenu(Menu.buildFromTemplate([
+        { label: app.name, submenu: [{ role: 'hide' }] }, { role: 'editMenu' }, { role: 'windowMenu' },
+      ]));
+    }
+    authenticator = createAuthenticator({ helper: authHelperPath() });
+    gate = new AuthGate({ authenticate: () => authenticator.authenticate(), store: authStore, log }).load();
+    if (gate.warning) state.warnings.push(gate.warning);
 
     const loaded = await loadSettings(SETTINGS_FILE);
     state.settings = loaded.settings;
@@ -667,6 +775,14 @@ if (!SMOKE && !app.requestSingleInstanceLock()) {
     applyUsb();
     tray = new Tray(trayIcon({ paused: state.agent.paused }));
     refreshTray();
-    if (!state.templates || state.warnings.length) openSettings();
+    if (!state.templates) openSettingsGuarded();
+    else if (state.warnings.length) notify(`Paseboon JS needs attention: ${state.warnings.at(-1)}`);
+    // An open Settings window re-locks after SESSION_IDLE_SECONDS without interaction.
+    let wasUnlocked = false;
+    setInterval(() => {
+      const now = gate.unlocked;
+      if (now !== wasUnlocked) broadcast();
+      wasUnlocked = now;
+    }, 5000).unref?.();
   });
 }

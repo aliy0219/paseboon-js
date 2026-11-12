@@ -1,7 +1,7 @@
 {
   "name": "paseboon-js",
   "productName": "Paseboon JS",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "description": "Locks your computer when you walk away, and when someone else sits down.",
   "license": "MIT",
   "private": true,
@@ -18,7 +18,8 @@
     "start": "electron .",
     "test": "node --test test/",
     "models": "node scripts/fetch-models.mjs",
-    "dist:mac": "npm run models && electron-builder --mac",
+    "build:auth": "node scripts/build-auth.mjs",
+    "dist:mac": "npm run models && npm run build:auth && electron-builder --mac",
     "dist:win": "npm run models && electron-builder --win",
     "dist:linux": "npm run models && electron-builder --linux"
   },

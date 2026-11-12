@@ -1,6 +1,51 @@
 // Settings window logic. Talks to the main process only through window.paseboon.
 (() => {
-  const api = window.paseboon;
+  const raw = window.paseboon;
+  const $id = (id) => document.getElementById(id);
+
+  // ── settings protection: every protected call may come back { authRequired } ──
+  let countdown = null;
+  function authText(r) {
+    if (r.reason === 'delay') return `Try again in ${r.retryIn} s.`;
+    if (r.reason === 'failed' && r.lock) return 'Too many failed attempts: the screen was locked.';
+    if (r.reason === 'failed') return `Authentication failed. Try again in ${r.retryIn} s.`;
+    return 'Authentication cancelled.';
+  }
+  function showAuth(r) {
+    clearInterval(countdown);
+    const msg = $id('auth-msg');
+    let left = r.retryIn || 0;
+    const base = r.reason === 'failed' && !r.lock ? 'Authentication failed. ' : '';
+    msg.textContent = authText(r);
+    if (left > 0 && !r.lock) {
+      countdown = setInterval(() => {
+        left -= 1;
+        msg.textContent = left > 0 ? `${base}Try again in ${left} s.` : '';
+        if (left <= 0) clearInterval(countdown);
+      }, 1000);
+    }
+  }
+  function noteAuth(res) {
+    if (res && res.authRequired) {
+      showAuth(res);
+      return { ...res, error: authText(res) };
+    }
+    if (res && !res.error) $id('auth-msg').textContent = '';
+    return res;
+  }
+  const api = Object.fromEntries(Object.entries(raw).map(([name, fn]) => [name,
+    name.startsWith('on') || typeof fn !== 'function' ? fn : async (...args) => noteAuth(await fn(...args))]));
+  // Interaction keeps an unlocked session alive (it re-locks after 2 min without).
+  let lastTouch = 0;
+  const touch = () => {
+    if (Date.now() - lastTouch > 15000) { lastTouch = Date.now(); raw.authTouch(); }
+  };
+  document.addEventListener('pointerdown', touch, true);
+  document.addEventListener('keydown', touch, true);
+  $id('auth-unlock').addEventListener('click', async () => {
+    const res = await api.authUnlock();
+    if (res && res.ok) render(await api.getState());
+  });
   const $ = (id) => document.getElementById(id);
   const form = $('form');
   const NUMERIC = ['idleThreshold', 'absentChecksToLock', 'recheckEvery', 'activeCheckEvery',
@@ -21,6 +66,11 @@
   function render(state) {
     current = state;
     $('status').textContent = state.status;
+    const auth = state.auth || { unlocked: true };
+    document.body.classList.toggle('locked', !auth.unlocked);
+    $('auth-lock').hidden = Boolean(auth.unlocked);
+    $('auth-banner').hidden = !auth.unprotected;
+    $('auth-banner').textContent = auth.unprotected ? `Settings are not protected: ${auth.unprotected}` : '';
     const box = $('warnings');
     box.replaceChildren(...state.warnings.map((w) => {
       const p = document.createElement('p');
@@ -71,7 +121,7 @@
   $('login').addEventListener('change', async (e) => {
     const res = await api.setLoginItem(e.target.checked);
     if (res.error) {
-      e.target.checked = false;
+      e.target.checked = Boolean(current?.loginItem);
       show($('form-result'), res.error, 'bad');
     }
   });

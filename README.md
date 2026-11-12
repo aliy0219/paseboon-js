@@ -85,6 +85,33 @@ Both modes need **Enroll face**. Your face is stored as 128 numbers per sample i
 - The last 20 USB locks go to `usb_events.json` (owner-only), so you can trust the
   device afterwards.
 
+## Settings protection (OS login)
+
+Changing Paseboon needs **your computer login**: Touch ID or your account password on
+macOS. The app never sees or stores the password; the OS checks it.
+
+- **Protected:** opening Settings, Pause/Resume, Quit (tray), Start at login, Enroll, Test
+  camera, Test lock, saving settings, every USB trust / remove / trust-connected, clearing the
+  USB list, opening and deleting photos. Checked in the **main process**, so a compromised
+  settings page cannot skip it.
+- **Not protected:** Lock now, the tray status, and OS shutdown/logout (nothing ever blocks a
+  system quit). The macOS app menu has no Quit item, so Cmd+Q does not bypass the tray.
+- **Session:** one successful login unlocks Settings until the window closes or after 2 minutes
+  without interaction; then the window shows "Settings are locked" with an Unlock button.
+- **Wrong attempts:** a cancel is not counted. After a failed login you wait 5 s, then 15 s,
+  before the next prompt (the window shows the countdown). The **3rd failure locks the screen**,
+  taking an intruder photo first if the photo toggle is on. The counter survives restarts
+  (`auth_state.json`, owner-only) and resets after the lock or a success.
+- **Unavailable** (no Touch ID/password, helper missing, unsupported OS): you are never locked
+  out. Settings open, with a red banner "Settings are not protected: <reason>". A crashed or
+  timed-out helper denies; only an explicit "unavailable" opens.
+- **How:** macOS uses a 60 KB Swift helper (`native/macos/paseboon-auth.swift`,
+  LocalAuthentication `deviceOwnerAuthentication`), built by `npm run build:auth` and shipped in
+  `Resources/`. Windows uses Windows Hello (`UserConsentVerifier` via PowerShell) and Linux uses
+  `pkexec`, which asks for an **admin** password: both **written but untested**.
+- **Limit:** someone at your unlocked computer can still kill the app (Activity Monitor) or
+  edit its files. This stops quick changes in the app; the screen lock is the real protection.
+
 ## Run from source
 
 ```bash

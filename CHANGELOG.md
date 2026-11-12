@@ -2,6 +2,27 @@
 
 Versions follow [Semantic Versioning](https://semver.org/). Each release is a git tag `vX.Y.Z`.
 
+## [0.2.0] - 2026-11-12
+
+### Added
+- **Settings protection with your computer login** (Touch ID or account password on macOS).
+  Opening Settings, Pause/Resume, Quit, Start at login, enroll, tests, saving settings, all USB
+  trust/remove actions, clearing the USB list and opening/deleting photos need an unlocked
+  session, enforced in the main process. A session lasts until the window closes or 2 minutes
+  without interaction. Lock now and OS shutdown/logout are never blocked.
+- Wrong attempts: cancels are not counted; failures wait 5 s, then 15 s; the 3rd failure locks
+  the screen (intruder photo first when enabled). The counter is persisted in
+  `auth_state.json` (0600). When authentication is unavailable, Settings open with a red
+  "Settings are not protected" banner; helper errors and timeouts deny.
+- macOS helper `native/macos/paseboon-auth.swift` (LocalAuthentication), built by
+  `npm run build:auth` and shipped in the app's Resources. Windows (Windows Hello) and Linux
+  (pkexec) are written but untested.
+
+### Changed
+- On macOS the app menu has no Quit item (quit from the tray, which is protected).
+- At startup Settings only opens by itself when no face is enrolled; other warnings show as a
+  notification.
+
 ## [0.1.5] - 2026-11-12
 
 ### Fixed

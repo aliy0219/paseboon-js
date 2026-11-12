@@ -37,6 +37,14 @@ mac:
   hardenedRuntime: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  # Platform extraResources REPLACE the top-level list: repeat the models.
+  extraResources:
+    - from: models
+      to: models
+      filter: ["*.onnx"]
+    # Touch ID / login-password helper for protected settings (scripts/build-auth.mjs)
+    - from: build/native/paseboon-auth
+      to: paseboon-auth
   extendInfo:
     LSUIElement: true
     NSCameraUsageDescription: >-
