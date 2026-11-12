@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 
 const ROOT = path.join(import.meta.dirname, '..');
@@ -78,10 +79,10 @@ test('URL allowlist: only this app\'s own files', async () => {
     .replace(/import \{ app, session \} from 'electron';/, 'const app = {}, session = {};');
   const mod = await import(`data:text/javascript,${encodeURIComponent(src)}`);
   const root = path.join(ROOT, 'src');
-  const fileUrl = (p) => new URL(`file://${p}`).href;
+  const fileUrl = (p) => pathToFileURL(p).href;   // correct on Windows too (drive letters)
   assert.equal(mod.isAllowedUrl(fileUrl(path.join(root, 'renderer', 'settings.html')), root), true);
   for (const bad of ['https://example.com/', 'http://127.0.0.1:11434/api', 'wss://x', 'data:text/html,hi',
-    'blob:file:///x', fileUrl('/etc/passwd'), fileUrl(`${root}/../../secret`), 'not a url']) {
+    'blob:file:///x', 'file://evil-host/share/x', fileUrl('/etc/passwd'), fileUrl(`${root}/../../secret`), 'not a url']) {
     assert.equal(mod.isAllowedUrl(bad, root), false, bad);
   }
 });

@@ -329,7 +329,8 @@ test('linux sysfs parsing skips root hubs and interfaces', () => {
   dev('usb1', { idVendor: '1d6b', idProduct: '0002', product: 'Root hub' });
   dev('1-1', { idVendor: '0781', idProduct: '5581', serial: '4C530001', product: 'Ultra' });
   dev('1-1.2', { idVendor: '046d', idProduct: 'c52b', manufacturer: 'Logitech' });
-  dev('1-1:1.0', { idVendor: 'ffff', idProduct: 'ffff' });
+  // Interface dirs contain ':', which Windows filenames cannot; the parser is the same code.
+  if (process.platform !== 'win32') dev('1-1:1.0', { idVendor: 'ffff', idProduct: 'ffff' });
   dev('1-3', { idVendor: 'zz', idProduct: '1' });
   const got = linuxDevices(root);
   assert.deepEqual(got.map(deviceKey), ['0781:5581:4C530001', '046d:c52b']);

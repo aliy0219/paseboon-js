@@ -19,7 +19,12 @@ export function isAllowedUrl(url, appRoot) {
   }
   if (u.protocol === 'devtools:') return true;
   if (u.protocol !== 'file:') return false; // http(s), ws(s), ftp, data, blob, ... all denied
-  const file = path.resolve(fileURLToPath(u));
+  let file;
+  try {
+    file = path.resolve(fileURLToPath(u));   // throws for remote hosts, relative paths, etc.
+  } catch {
+    return false;                            // anything we cannot map to a local path is denied
+  }
   const root = path.resolve(appRoot);
   return file === root || file.startsWith(root + path.sep);
 }

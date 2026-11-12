@@ -2,6 +2,14 @@
 
 Versions follow [Semantic Versioning](https://semver.org/). Each release is a git tag `vX.Y.Z`.
 
+## [0.1.2] - 2026-11-12
+
+### Fixed
+- Windows: the network allowlist threw on file URLs it could not map to a local path instead
+  of denying them. It now denies them (fail closed); tests build file URLs with
+  `pathToFileURL` so drive letters are correct.
+- Windows CI: the Linux sysfs parser test no longer creates a folder name with `:`.
+
 ## [0.1.1] - 2026-11-12
 
 ### Fixed
