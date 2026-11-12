@@ -2,6 +2,13 @@
 
 Versions follow [Semantic Versioning](https://semver.org/). Each release is a git tag `vX.Y.Z`.
 
+## [0.1.3] - 2026-11-12
+
+### Added
+- GitHub Releases: pushing a `v*` tag builds macOS, Windows and Linux, then publishes one
+  release with every installer (`.dmg`, `.zip`, `Setup .exe`, `.AppImage`, `.deb`) and
+  `SHA256SUMS.txt`. Release notes come from this changelog.
+
 ## [0.1.2] - 2026-11-12
 
 ### Fixed

@@ -54,3 +54,50 @@ jobs:
             dist/*.AppImage
             dist/*.deb
           if-no-files-found: error
+
+  # On a version tag (v*), after all three OS builds pass, publish one GitHub
+  # Release with every installer attached, plus SHA256SUMS.txt.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create the release and upload its assets
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: assets
+          pattern: paseboon-js-*
+          merge-multiple: true
+      - name: Checksums
+        working-directory: assets
+        run: |
+          ls -la
+          sha256sum -- * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Release notes from CHANGELOG.md
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          awk -v v="[$ver]" 'index($0, "## ") == 1 { p = index($0, v) > 0; next } p' CHANGELOG.md > notes.md
+          cat >> notes.md <<'EOF'
+
+          ### Downloads
+          - **macOS (Apple silicon):** `.dmg` (or `.zip`). Not notarized: right-click → Open the first time.
+          - **Windows (x64):** `Setup .exe`.
+          - **Linux (x64):** `.AppImage` or `.deb`.
+          - Verify with `SHA256SUMS.txt`.
+
+          On Windows and Linux, CI only verifies that the app installs, starts and blocks
+          network. The camera, lock and USB guard have only been tried on macOS.
+          EOF
+          cat notes.md
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" assets/*
+          --repo "$GITHUB_REPOSITORY"
+          --title "Paseboon JS $GITHUB_REF_NAME"
+          --notes-file notes.md
+          --verify-tag
